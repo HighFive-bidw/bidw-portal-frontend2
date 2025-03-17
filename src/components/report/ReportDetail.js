@@ -32,6 +32,7 @@ import {
 import { reportService, subscriptionService } from '../../utils/api';
 import { formatDate } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
+import ReportDownload from './ReportDownload';
 
 function ReportDetail() {
   const { reportId } = useParams();
@@ -48,6 +49,10 @@ function ReportDetail() {
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogType, setDialogType] = useState('');
   const [dialogMessage, setDialogMessage] = useState('');
+
+  const [dialogUrl, setDialogUrl] = useState('');
+
+
 
   const fetchReportDetail = async () => {
     try {
@@ -96,17 +101,19 @@ function ReportDetail() {
     try {
       setDownloadLoading(true);
       const response = await reportService.downloadReport(reportId);
-      setDownloadUrl(response.data.downloadUrl);
-      
+      const downloadUrl = response.data.downloadUrl;
+      setDownloadUrl(downloadUrl);
+
       // 자동 다운로드 시작
       const link = document.createElement('a');
-      link.href = response.data.downloadUrl;
+      link.href = downloadUrl;
       link.setAttribute('download', response.data.fileName);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      showDialog('success', '리포트가 성공적으로 다운로드되었습니다.');
+
+      // URL 정보와 함께 성공 대화상자 표시
+      showDialog('success', '리포트가 성공적으로 다운로드되었습니다.', downloadUrl);
     } catch (err) {
       console.error('Error downloading report:', err);
       showDialog('error', '리포트 다운로드 중 오류가 발생했습니다.');
@@ -114,6 +121,7 @@ function ReportDetail() {
       setDownloadLoading(false);
     }
   };
+
 
   const handleSubscribe = async () => {
     try {
@@ -149,11 +157,14 @@ function ReportDetail() {
     }
   };
 
-  const showDialog = (type, message) => {
-    setDialogType(type);
-    setDialogMessage(message);
-    setOpenDialog(true);
-  };
+
+    const showDialog = (type, message, url = '') => {
+      setDialogType(type);
+      setDialogMessage(message);
+      setDialogUrl(url);
+      setOpenDialog(true);
+    };
+
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
@@ -206,6 +217,8 @@ function ReportDetail() {
             <Typography variant="body2" color="text.secondary">
               마지막 업데이트: {formatDate(report.lastUpdated)}
             </Typography>
+
+
             <Box>
               <Button
                 variant="contained"
@@ -288,6 +301,24 @@ function ReportDetail() {
           <DialogContentText>
             {dialogMessage}
           </DialogContentText>
+          {dialogUrl && (
+            <Box mt={2}>
+              <Typography variant="subtitle2">다운로드 URL:</Typography>
+              <Typography
+                variant="body2"
+                component="div"
+                sx={{
+                  wordBreak: 'break-all',
+                  bgcolor: 'grey.100',
+                  p: 1,
+                  borderRadius: 1,
+                  mt: 0.5
+                }}
+              >
+                {dialogUrl}
+              </Typography>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog} autoFocus>
@@ -295,6 +326,7 @@ function ReportDetail() {
           </Button>
         </DialogActions>
       </Dialog>
+      <ReportDownload reportId={reportId} />
     </Box>
   );
 }

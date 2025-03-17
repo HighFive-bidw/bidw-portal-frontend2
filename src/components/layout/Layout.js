@@ -126,12 +126,7 @@ function Layout() {
         open={isMenuOpen}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={handleMenuClose}>
-          <ListItemIcon>
-            <AccountCircleIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>프로필</ListItemText>
-        </MenuItem>
+
         <MenuItem onClick={handleLogout}>
           <ListItemIcon>
             <LogoutIcon fontSize="small" />
