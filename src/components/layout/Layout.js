@@ -94,47 +94,16 @@ function Layout() {
             <Typography variant="body2" sx={{ mr: 2 }}>
               {currentUser?.username}
             </Typography>
-            <IconButton
-              size="large"
-              edge="end"
-              aria-label="account of current user"
-              aria-controls="menu-appbar"
-              aria-haspopup="true"
-              onClick={handleProfileMenuOpen}
+            <Button
               color="inherit"
-            >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-                {currentUser?.username.charAt(0).toUpperCase()}
-              </Avatar>
-            </IconButton>
+              startIcon={<LogoutIcon />}
+              onClick={handleLogout}
+              size="medium">
+            </Button>
           </Box>
         </Toolbar>
       </AppBar>
-
-      <Menu
-        id="menu-appbar"
-        anchorEl={anchorEl}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        keepMounted
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-        open={isMenuOpen}
-        onClose={handleMenuClose}
-      >
-
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <LogoutIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>로그아웃</ListItemText>
-        </MenuItem>
-      </Menu>
-
+      
       <Drawer
         variant="persistent"
         anchor="left"
