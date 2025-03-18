@@ -1,0 +1,102 @@
+def PIPELINE_ID = "${env.BUILD_NUMBER}"
+
+def getImageTag() {
+    def dateFormat = new java.text.SimpleDateFormat('yyyyMMddHHmmss')
+    def currentDate = new Date()
+    return dateFormat.format(currentDate)
+}
+
+podTemplate(
+    label: "${PIPELINE_ID}",
+    serviceAccount: 'jenkins',
+    containers: [
+        containerTemplate(name: 'node', image: 'node:20-slim', ttyEnabled: true, command: 'cat'),
+        containerTemplate(name: 'podman', image: "mgoltzsche/podman", ttyEnabled: true, command: 'cat', privileged: true),
+        containerTemplate(name: 'azure-cli', image: 'hiondal/azure-kubectl:latest', command: 'cat', ttyEnabled: true),
+        containerTemplate(name: 'envsubst', image: "hiondal/envsubst", command: 'sleep', args: '1h')
+    ],
+    volumes: [
+        emptyDirVolume(mountPath: '/root/.azure', memory: false)
+    ]
+) {
+    node(PIPELINE_ID) {
+        def props
+        def imageTag = getImageTag()
+        def manifest = "deploy.yaml"
+        def namespace
+
+        stage("Get Source") {
+            checkout scm
+            props = readProperties file: "deployment/deploy_env_vars"
+            namespace = "${props.namespace}"
+        }
+
+        stage("Setup AKS") {
+            container('azure-cli') {
+                withCredentials([azureServicePrincipal('azure-credentials')]) {
+                    sh """
+                        az login --service-principal -u \$AZURE_CLIENT_ID -p \$AZURE_CLIENT_SECRET -t \$AZURE_TENANT_ID
+                        az aks get-credentials --resource-group ictcoe-edu --name ${props.teamid}-aks --overwrite-existing
+                        kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
+                    """
+                }
+            }
+        }
+
+        stage('Build & Push Image') {
+            container('podman') {
+                withCredentials([usernamePassword(
+                    credentialsId: 'acr-credentials',
+                    usernameVariable: 'USERNAME',
+                    passwordVariable: 'PASSWORD'
+                )]) {
+                    def imagePath = "${props.registry}/${props.image_org}/${props.root_project}:${imageTag}"
+                    
+                    sh """
+                        podman login ${props.registry} --username \$USERNAME --password \$PASSWORD
+
+                        podman build \\
+                            --build-arg PROJECT_FOLDER="." \\
+                            --build-arg REACT_APP_AUTH_URL="${props.react_app_auth_url}" \\
+                            --build-arg REACT_APP_REPORT_URL="${props.react_app_report_url}" \\
+                            --build-arg REACT_APP_SUBSCRIPTION_URL="${props.react_app_subscription_url}" \\
+                            --build-arg BUILD_FOLDER="deployment" \\
+                            --build-arg EXPORT_PORT="${props.export_port}" \\
+                            -f deployment/container/Dockerfile-bidw-web \\
+                            -t ${imagePath} .
+                        
+                        podman push ${imagePath}
+                    """
+                }
+            }
+        }
+
+        stage('Update Repository') {
+            container('azure-cli') {
+                withCredentials([usernamePassword(
+                    credentialsId: 'github-credentials',
+                    usernameVariable: 'GIT_USERNAME',
+                    passwordVariable: 'GIT_PASSWORD'
+                )]) {
+                    // 임시 디렉토리 생성 및 git clone
+                    sh """
+                        git config --global user.email "jenkins@example.com"
+                        git config --global user.name "Jenkins"
+                
+                        # Clone the manifest repository
+                        git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/HighFive-bidw/bidw-manifest.git
+                        cd bidw-manifest
+                
+                        # Update frontend deployment image
+                        sed -i 's|image: ${props.registry}/${props.image_org}/${props.root_project}:.*|image: ${props.registry}/${props.image_org}/${props.root_project}:${imageTag}|g' deployments/manifest/frontend-deployment.yaml
+                
+                        # Commit and push changes
+                        git add -A
+                        git commit -m "Update frontend image tag to ${imageTag}"
+                        git push origin main
+                    """
+                }
+            }
+        }
+    }
+}
