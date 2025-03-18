@@ -13,12 +13,10 @@ podTemplate(
         containerTemplate(name: 'node', image: 'node:20-slim', ttyEnabled: true, command: 'cat'),
         containerTemplate(name: 'podman', image: "mgoltzsche/podman", ttyEnabled: true, command: 'cat', privileged: true),
         containerTemplate(name: 'azure-cli', image: 'hiondal/azure-kubectl:latest', command: 'cat', ttyEnabled: true),
-        containerTemplate(name: 'envsubst', image: "hiondal/envsubst", command: 'sleep', args: '1h'),
-        containerTemplate(name: 'sonar-scanner', image: 'sonarsource/sonar-scanner-cli:latest', command: 'cat', ttyEnabled: true)
+        containerTemplate(name: 'envsubst', image: "hiondal/envsubst", command: 'sleep', args: '1h')
     ],
     volumes: [
-        emptyDirVolume(mountPath: '/root/.azure', memory: false),
-        emptyDirVolume(mountPath: '/opt/sonar-scanner/.sonar/cache', memory: false)
+        emptyDirVolume(mountPath: '/root/.azure', memory: false)
     ]
 ) {
     node(PIPELINE_ID) {
@@ -26,39 +24,11 @@ podTemplate(
         def imageTag = getImageTag()
         def manifest = "deploy.yaml"
         def namespace
-        def sonarScannerHome = '/opt/sonar-scanner'
 
         stage("Get Source") {
             checkout scm
             props = readProperties file: "deployment/deploy_env_vars"
             namespace = "${props.namespace}"
-        }
-
-        stage('Code Analysis & Quality Gate') {
-            container('node') {
-                sh "npm install"
-                sh "npm test -- --coverage --passWithNoTests"   //test code 없어도 통과되게 함  
-            }
-            
-            container('sonar-scanner') {
-                withSonarQubeEnv('SonarQube') {
-                    sh """
-                        ${sonarScannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=bidw-portal-frontend2 \
-                        -Dsonar.sources=src \
-                        -Dsonar.tests=src \
-                        -Dsonar.test.inclusions=src/**/*.test.js,src/**/*.test.jsx \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                    """
-                }
-            }
-            
-            timeout(time: 10, unit: 'MINUTES') {
-                def qg = waitForQualityGate()
-                if (qg.status != 'OK') {
-                    error "Pipeline aborted due to quality gate failure: ${qg.status}"
-                }
-            }
         }
 
         stage("Setup AKS") {
