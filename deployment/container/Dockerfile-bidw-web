@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Install dependencies
 COPY ${PROJECT_FOLDER}/package*.json ./
-RUN npm ci --only=production
+#RUN npm ci --only=production'
+RUN npm install --production
 
 # Build application
 COPY ${PROJECT_FOLDER} .
