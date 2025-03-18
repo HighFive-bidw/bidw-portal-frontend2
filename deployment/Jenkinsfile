@@ -1,0 +1,140 @@
+def PIPELINE_ID = "${env.BUILD_NUMBER}"
+
+def getImageTag() {
+    def dateFormat = new java.text.SimpleDateFormat('yyyyMMddHHmmss')
+    def currentDate = new Date()
+    return dateFormat.format(currentDate)
+}
+
+podTemplate(
+    label: "${PIPELINE_ID}",
+    serviceAccount: 'jenkins',
+    containers: [
+        containerTemplate(name: 'node', image: 'node:20-slim', ttyEnabled: true, command: 'cat'),
+        containerTemplate(name: 'podman', image: "mgoltzsche/podman", ttyEnabled: true, command: 'cat', privileged: true),
+        containerTemplate(name: 'azure-cli', image: 'hiondal/azure-kubectl:latest', command: 'cat', ttyEnabled: true),
+        containerTemplate(name: 'envsubst', image: "hiondal/envsubst", command: 'sleep', args: '1h'),
+        containerTemplate(name: 'sonar-scanner', image: 'sonarsource/sonar-scanner-cli:latest', command: 'cat', ttyEnabled: true)
+    ],
+    volumes: [
+        emptyDirVolume(mountPath: '/root/.azure', memory: false),
+        emptyDirVolume(mountPath: '/opt/sonar-scanner/.sonar/cache', memory: false)
+    ]
+) {
+    node(PIPELINE_ID) {
+        def props
+        def imageTag = getImageTag()
+        def manifest = "deploy.yaml"
+        def namespace
+        def sonarScannerHome = '/opt/sonar-scanner'
+
+        stage("Get Source") {
+            checkout scm
+            props = readProperties file: "deployment/deploy_env_vars"
+            namespace = "${props.namespace}"
+        }
+
+        stage('Code Analysis & Quality Gate') {
+            container('node') {
+                sh "npm install"
+                sh "npm test -- --coverage --passWithNoTests"   //test code 없어도 통과되게 함  
+            }
+            
+            container('sonar-scanner') {
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        ${sonarScannerHome}/bin/sonar-scanner \
+                        -Dsonar.projectKey=bidw-portal-frontend2 \
+                        -Dsonar.sources=src \
+                        -Dsonar.tests=src \
+                        -Dsonar.test.inclusions=src/**/*.test.js,src/**/*.test.jsx \
+                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                    """
+                }
+            }
+            
+            timeout(time: 10, unit: 'MINUTES') {
+                def qg = waitForQualityGate()
+                if (qg.status != 'OK') {
+                    error "Pipeline aborted due to quality gate failure: ${qg.status}"
+                }
+            }
+        }
+
+        stage("Setup AKS") {
+            container('azure-cli') {
+                withCredentials([azureServicePrincipal('azure-credentials')]) {
+                    sh """
+                        az login --service-principal -u \$AZURE_CLIENT_ID -p \$AZURE_CLIENT_SECRET -t \$AZURE_TENANT_ID
+                        az aks get-credentials --resource-group ictcoe-edu --name ${props.teamid}-aks --overwrite-existing
+                        kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
+                    """
+                }
+            }
+        }
+
+        stage('Build & Push Image') {
+            container('podman') {
+                withCredentials([usernamePassword(
+                    credentialsId: 'acr-credentials',
+                    usernameVariable: 'USERNAME',
+                    passwordVariable: 'PASSWORD'
+                )]) {
+                    def imagePath = "${props.registry}/${props.image_org}/${props.root_project}:${imageTag}"
+                    
+                    sh """
+                        podman login ${props.registry} --username \$USERNAME --password \$PASSWORD
+
+                        podman build \
+                            --build-arg PROJECT_FOLDER="." \
+                            --build-arg REACT_APP_AUTH_URL="${props.react_app_auth_url}" \
+                            --build-arg REACT_APP_REPORT_URL="${props.react_app_report_url}" \
+                            --build-arg REACT_APP_SUBSCRIPTION_URL="${props.react_app_subscription_url}" \
+                            --build-arg BUILD_FOLDER="deployment" \
+                            --build-arg EXPORT_PORT="${props.export_port}" \
+                            -f deployment/container/Dockerfile-bidw-web \
+                            -t ${imagePath} .
+                        
+                        podman push ${imagePath}
+                    """
+                }
+            }
+        }
+
+        stage('Generate & Apply Manifest') {
+            container('envsubst') {
+                sh """
+                    export namespace=${namespace}
+                    export image_path=${props.registry}/${props.image_org}/${props.root_project}:${imageTag}
+                    export replicas=${props.replicas}
+                    export export_port=${props.export_port}
+                    export react_app_auth_url=${props.react_app_auth_url}
+                    export react_app_report_url=${props.react_app_report_url}
+                    export react_app_subscription_url=${props.react_app_subscription_url}
+                    export resources_requests_cpu=${props.resources_requests_cpu}
+                    export resources_requests_memory=${props.resources_requests_memory}
+                    export resources_limits_cpu=${props.resources_limits_cpu}
+                    export resources_limits_memory=${props.resources_limits_memory}
+                    
+                    envsubst < deployment/${manifest}.template > deployment/${manifest}
+                    cat deployment/${manifest}
+                """
+            }
+
+            container('azure-cli') {
+                sh """
+                    kubectl apply -f deployment/${manifest}
+                    
+                    echo "Waiting for deployment to be ready..."
+                    kubectl -n ${namespace} wait --for=condition=available deployment/bidw-portal-frontend2 --timeout=300s
+                    
+                    echo "Waiting for service external IP..."
+                    while [[ -z \$(kubectl -n ${namespace} get svc bidw-portal-frontend2 -o jsonpath='{.status.loadBalancer.ingress[0].ip}') ]]; do
+                        sleep 5
+                    done
+                    echo "Service external IP: \$(kubectl -n ${namespace} get svc bidw-portal-frontend2 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')"
+                """
+            }
+        }
+    }
+}

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bidw-portal-frontend2
+  namespace: high5-bidw-ns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: bidw-portal-frontend2
+  template:
+    metadata:
+      labels:
+        app: bidw-portal-frontend2
+    spec:
+      containers:
+      - name: bidw-portal-frontend2
+        image: high5cr.azurecr.io/bidw/bidw-portal-frontend2:1.0.0
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 18080
+          name: http
+        resources:
+          requests:
+            cpu: 256m
+            memory: 256Mi
+          limits:
+            cpu: 1024m
+            memory: 1024Mi
+        volumeMounts:
+        - name: runtime-env
+          mountPath: /usr/share/nginx/html/runtime-env.js
+          subPath: runtime-env.js
+      volumes:
+      - name: runtime-env
+        configMap:
+          name: bidw-portal-frontend2-config

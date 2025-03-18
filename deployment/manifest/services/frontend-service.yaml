@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: bidw-portal-frontend2
+  namespace: high5-bidw-ns
+spec:
+  selector:
+    app: bidw-portal-frontend2
+  ports:
+  - port: 80
+    targetPort: 18080
+    protocol: TCP
+  type: LoadBalancer

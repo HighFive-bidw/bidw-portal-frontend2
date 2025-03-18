@@ -1,0 +1,23 @@
+# Team Settings
+teamid=high5
+root_project=bidw-portal-frontend2
+namespace=${teamid}-bidw-ns
+
+# Container Registry Settings
+registry=${teamid}cr.azurecr.io
+image_org=bidw
+
+# Application Settings
+replicas=1
+export_port=18080
+
+# Backend Service URLs
+react_app_auth_url=http://20.249.180.111/api/auth
+react_app_report_url=http://20.249.180.111/api/report
+react_app_subscription_url=http://20.249.180.111/api/subscription
+
+# Resource Settings
+resources_requests_cpu=256m
+resources_requests_memory=256Mi
+resources_limits_cpu=1024m
+resources_limits_memory=1024Mi
