@@ -1,10 +1,10 @@
 # Team Settings
 teamid=high5
 root_project=bidw-portal-frontend2
-namespace=${teamid}-bidw-ns
+namespace=high5-bidw-ns
 
 # Container Registry Settings
-registry=${teamid}cr.azurecr.io
+registry=high5cr.azurecr.io
 image_org=bidw
 
 # Application Settings
