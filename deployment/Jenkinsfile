@@ -20,7 +20,8 @@ podTemplate(
     ]
 ) {
     node(PIPELINE_ID) {
-        def props
+        timeout(time: 2, unit: 'HOURS') {  // 전체 파이프라인을 2시간으로 제한
+		def props
         def imageTag = getImageTag()
         def manifest = "deploy.yaml"
         def namespace
@@ -106,5 +107,7 @@ podTemplate(
                 """
             }
         }
+        }
+        
     }
 }
