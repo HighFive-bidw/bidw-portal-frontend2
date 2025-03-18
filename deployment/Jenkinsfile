@@ -37,7 +37,7 @@ podTemplate(
                     sh """
                         az login --service-principal -u \$AZURE_CLIENT_ID -p \$AZURE_CLIENT_SECRET -t \$AZURE_TENANT_ID
                         az aks get-credentials --resource-group ictcoe-edu --name ${props.teamid}-aks --overwrite-existing
-                        kubectl create namespace ${namespace} --dry-run=client -o yaml | kubectl apply -f -
+                        kubectl create namespace high5-bidw-ns --dry-run=client -o yaml | kubectl apply -f -
                     """
                 }
             }
