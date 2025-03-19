@@ -1,5 +1,4 @@
-// Jenkinsfile for Frontend with ArgoCD
-
+// Jenkinsfile-frontend
 def PIPELINE_ID = "${env.BUILD_NUMBER}"
 
 def getImageTag() {
@@ -22,6 +21,7 @@ podTemplate(
     ]
 ) {
     node(PIPELINE_ID) {
+        timeout(time: 2, unit: 'HOURS') {  // 전체 파이프라인을 2시간으로 제한
         def props
         def imageTag = getImageTag()
         def namespace
@@ -30,6 +30,17 @@ podTemplate(
             checkout scm
             props = readProperties file: "deployment/deploy_env_vars"
             namespace = "${props.namespace}"
+        }
+
+        stage("Setup AKS") {
+            container('azure-cli') {
+                withCredentials([azureServicePrincipal('azure-credentials')]) {
+                    sh """
+                        az login --service-principal -u \$AZURE_CLIENT_ID -p \$AZURE_CLIENT_SECRET -t \$AZURE_TENANT_ID
+                        az aks get-credentials --resource-group ictcoe-edu --name ${props.teamid}-aks --overwrite-existing
+                    """
+                }
+            }
         }
 
         stage('Build & Push Image') {
@@ -44,14 +55,14 @@ podTemplate(
                     sh """
                         podman login ${props.registry} --username \$USERNAME --password \$PASSWORD
 
-                        podman build \
-                            --build-arg PROJECT_FOLDER="." \
-                            --build-arg REACT_APP_AUTH_URL="${props.react_app_auth_url}" \
-                            --build-arg REACT_APP_REPORT_URL="${props.react_app_report_url}" \
-                            --build-arg REACT_APP_SUBSCRIPTION_URL="${props.react_app_subscription_url}" \
-                            --build-arg BUILD_FOLDER="deployment" \
-                            --build-arg EXPORT_PORT="${props.export_port}" \
-                            -f deployment/container/Dockerfile-bidw-web \
+                        podman build \\
+                            --build-arg PROJECT_FOLDER="." \\
+                            --build-arg REACT_APP_AUTH_URL="${props.react_app_auth_url}" \\
+                            --build-arg REACT_APP_REPORT_URL="${props.react_app_report_url}" \\
+                            --build-arg REACT_APP_SUBSCRIPTION_URL="${props.react_app_subscription_url}" \\
+                            --build-arg BUILD_FOLDER="deployment" \\
+                            --build-arg EXPORT_PORT="${props.export_port}" \\
+                            -f deployment/container/Dockerfile-bidw-web \\
                             -t ${imagePath} .
                         
                         podman push ${imagePath}
@@ -60,24 +71,34 @@ podTemplate(
             }
         }
 
-        stage('Update Frontend Manifest') {
+        stage('Update Manifest and Push') {
             container('git') {
-                withCredentials([gitUsernamePassword(credentialsId: 'github-credentials')]) {
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
                     sh """
-                        git clone https://github.com/HighFive-bidw/bidw-manifest.git
+                        # Git 설정
+                        git config --global user.email "jenkins@example.com"
+                        git config --global user.name "Jenkins CI"
+                        
+                        # 매니페스트 저장소 클론
+                        git clone https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/HighFive-bidw/bidw-manifest.git
                         cd bidw-manifest
                         
-                        sed -i 's|image: .*|image: ${props.registry}/${props.image_org}/${props.root_project}:${imageTag}|g' manifest_frontend/deployments/frontend-deployment.yaml
+                        # 프론트엔드 이미지 업데이트
+                        echo "Updating frontend image"
+                        # sed를 사용하여 이미지 태그 업데이트
+                        sed -i "s|image: ${props.registry}/${props.image_org}/${props.root_project}:.*|image: ${props.registry}/${props.image_org}/${props.root_project}:${imageTag}|g" manifest_frontend/deployments/frontend-deployment.yaml
                         
-                        git config --global user.email "jenkins@example.com"
-                        git config --global user.name "Jenkins"
+                        # 변경 내용 확인
+                        cat manifest_frontend/deployments/frontend-deployment.yaml | grep image:
                         
+                        # Git에 변경 사항 커밋 및 푸시
                         git add manifest_frontend/deployments/frontend-deployment.yaml
-                        git commit -m "Update frontend deployment image to ${imageTag}"
-                        git push origin main
+                        git commit -m "Update frontend image tag to ${imageTag}"
+                        git push
                     """
                 }
             }
+        }
         }
     }
 }
