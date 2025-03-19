@@ -57,9 +57,6 @@ podTemplate(
 
                         podman build \\
                             --build-arg PROJECT_FOLDER="." \\
-                            --build-arg REACT_APP_AUTH_URL="${props.react_app_auth_url}" \\
-                            --build-arg REACT_APP_REPORT_URL="${props.react_app_report_url}" \\
-                            --build-arg REACT_APP_SUBSCRIPTION_URL="${props.react_app_subscription_url}" \\
                             --build-arg BUILD_FOLDER="deployment" \\
                             --build-arg EXPORT_PORT="${props.export_port}" \\
                             -f deployment/container/Dockerfile-bidw-web \\
