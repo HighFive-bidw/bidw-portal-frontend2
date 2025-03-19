@@ -7,6 +7,6 @@ data:
   runtime-env.js: |
     window.__runtime_config__ = { 
       AUTH_URL: 'http://20.249.180.111/api/auth',
-      REPORT_URL: 'http://20.249.180.111/api/report',
-      SUBSCRIPTION_URL: 'http://20.249.180.111/api/subscription'
+      REPORT_URL: 'http://20.249.180.111/api/reports',
+      SUBSCRIPTION_URL: 'http://20.249.180.111/api/subscriptions'
     }
