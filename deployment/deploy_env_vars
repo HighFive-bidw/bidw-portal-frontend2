@@ -6,6 +6,8 @@ namespace=high5-bidw-ns
 # Container Registry Settings
 registry=high5cr.azurecr.io
 image_org=bidw
+image_path=${registry}/${image_org}/${root_project}:${version}
+version=1.0.0
 
 # Application Settings
 replicas=1

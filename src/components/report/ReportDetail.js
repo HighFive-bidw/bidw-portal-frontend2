@@ -1,3 +1,4 @@
+// src/components/report/ReportDetail.js
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -33,8 +34,9 @@ import { reportService, subscriptionService } from '../../utils/api';
 import { formatDate } from '../../utils/formatters';
 import { useAuth } from '../../context/AuthContext';
 import ReportDownload from './ReportDownload';
+import AiQueryPanel from './AiQueryPanel';
 
-function ReportDetail() {
+function ReportDetail({ activeTab = 0, selectedQuestion = '', onQuestionSelected = () => {} }) {
   const { reportId } = useParams();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
@@ -49,10 +51,7 @@ function ReportDetail() {
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogType, setDialogType] = useState('');
   const [dialogMessage, setDialogMessage] = useState('');
-
   const [dialogUrl, setDialogUrl] = useState('');
-
-
 
   const fetchReportDetail = async () => {
     try {
@@ -122,7 +121,6 @@ function ReportDetail() {
     }
   };
 
-
   const handleSubscribe = async () => {
     try {
       setSubscribing(true);
@@ -157,14 +155,12 @@ function ReportDetail() {
     }
   };
 
-
-    const showDialog = (type, message, url = '') => {
-      setDialogType(type);
-      setDialogMessage(message);
-      setDialogUrl(url);
-      setOpenDialog(true);
-    };
-
+  const showDialog = (type, message, url = '') => {
+    setDialogType(type);
+    setDialogMessage(message);
+    setDialogUrl(url);
+    setOpenDialog(true);
+  };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
@@ -218,7 +214,6 @@ function ReportDetail() {
               마지막 업데이트: {formatDate(report.lastUpdated)}
             </Typography>
 
-
             <Box>
               <Button
                 variant="contained"
@@ -257,37 +252,52 @@ function ReportDetail() {
         </CardContent>
       </Card>
 
-      <Typography variant="h6" gutterBottom>
-        리포트 데이터
-      </Typography>
+      {activeTab === 0 && (
+        <>
+          <Typography variant="h6" gutterBottom>
+            리포트 데이터
+          </Typography>
 
-      {report.data && report.data.length > 0 ? (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                {Object.keys(report.data[0]).map((key) => (
-                  <TableCell key={key}>{key}</TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {report.data.map((row, index) => (
-                <TableRow key={index}>
-                  {Object.values(row).map((value, i) => (
-                    <TableCell key={i}>
-                      {typeof value === 'object' && value !== null
-                        ? JSON.stringify(value)
-                        : value}
-                    </TableCell>
+          {report.data && report.data.length > 0 ? (
+            <TableContainer component={Paper}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    {Object.keys(report.data[0]).map((key) => (
+                      <TableCell key={key}>{key}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {report.data.map((row, index) => (
+                    <TableRow key={index}>
+                      {Object.values(row).map((value, i) => (
+                        <TableCell key={i}>
+                          {typeof value === 'object' && value !== null
+                            ? JSON.stringify(value)
+                            : value}
+                        </TableCell>
+                      ))}
+                    </TableRow>
                   ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : (
-        <Alert severity="info">리포트에 표시할 데이터가 없습니다.</Alert>
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Alert severity="info">리포트에 표시할 데이터가 없습니다.</Alert>
+          )}
+
+          <ReportDownload reportId={reportId} />
+        </>
+      )}
+
+      {activeTab === 1 && (
+        <AiQueryPanel 
+          reportId={reportId} 
+          reportName={report.reportName}
+          initialQuestion={selectedQuestion}
+          onQuestionProcessed={onQuestionSelected}
+        />
       )}
 
       <Dialog
@@ -326,7 +336,6 @@ function ReportDetail() {
           </Button>
         </DialogActions>
       </Dialog>
-      <ReportDownload reportId={reportId} />
     </Box>
   );
 }

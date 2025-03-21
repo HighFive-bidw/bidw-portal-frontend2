@@ -5,10 +5,12 @@ metadata:
   name: bidw-portal-frontend2-config
   namespace: ${namespace}
 data:
-  EXPORT_PORT: "${export_port}"
-  REACT_APP_AUTH_URL: "${react_app_auth_url}"
-  REACT_APP_REPORT_URL: "${react_app_report_url}"
-  REACT_APP_SUBSCRIPTION_URL: "${react_app_subscription_url}"
+  runtime-env.js: |
+    window.__runtime_config__ = {
+      AUTH_URL: '${react_app_auth_url}',
+      REPORT_URL: '${react_app_report_url}',
+      SUBSCRIPTION_URL: '${react_app_subscription_url}'
+    }
 
 ---
 # Deployment
@@ -31,9 +33,9 @@ spec:
       - name: bidw-portal-frontend2
         image: ${image_path}
         imagePullPolicy: Always
-        envFrom:
-        - configMapRef:
-            name: bidw-portal-frontend2-config
+        ports:
+        - containerPort: ${export_port}
+          name: http
         resources:
           requests:
             cpu: ${resources_requests_cpu}
@@ -41,8 +43,10 @@ spec:
           limits:
             cpu: ${resources_limits_cpu}
             memory: ${resources_limits_memory}
-        ports:
-        - containerPort: ${export_port}
+        volumeMounts:
+        - name: runtime-env
+          mountPath: /usr/share/nginx/html/runtime-env.js
+          subPath: runtime-env.js
         readinessProbe:
           httpGet:
             path: /
@@ -55,6 +59,10 @@ spec:
             port: ${export_port}
           initialDelaySeconds: 30
           periodSeconds: 15
+      volumes:
+      - name: runtime-env
+        configMap:
+          name: bidw-portal-frontend2-config
 
 ---
 # Service
@@ -69,4 +77,5 @@ spec:
   ports:
   - port: 80
     targetPort: ${export_port}
+    protocol: TCP
   type: LoadBalancer
